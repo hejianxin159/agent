@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package grpc_server;
+
+service InnerSensor {
+    // 上传主机探针流量
+    rpc UploadProbeTrafficLog (ProbeTrafficLog) returns (Response) {}
+
+    // 获取任务
+    rpc FetchTask (Flag) returns (Task) {}
+    // 反馈任务执行结果
+    rpc UploadTaskStatus (TaskStatus) returns (Response) {}
+    // 上传探针的信息
+    rpc UploadProbeInfo (ProbeInfo) returns (Response) {}
+}
+
+message ProbeTrafficLog {
+    string sensor_id = 1;
+    string probe_id = 2;
+    string interface = 3;
+    string src_ethernet = 4;
+    string dst_ethernet = 5;
+    string src_ip = 6;
+    string dst_ip = 7;
+    string src_port = 8;
+    string dst_port = 9;
+    string protocol = 10;
+    string action  = 11;
+    string desc = 12;
+    string playload = 13;
+    int32 layer = 14;
+    string raw_log = 15;
+    string detail = 16;
+    bool require_analysis = 17;
+    string create_time = 18;
+    AlertLogType type = 19;
+}
+
+enum AlertLogType {
+    NO_SESSION = 0;
+    REQUEST = 1;
+    RESPONSE = 2;
+}
+
+
+message Response {
+  int32 status = 1;
+  string msg = 2;
+}
+
+message Flag {
+    string probe_id = 1;
+}
+
+message Task {
+    repeated string task = 1;
+}
+
+message TaskStatus {
+    string task_id = 1;
+    string status = 2;
+    string detail = 3;
+}
+
+message ProbeInfo {
+    string probe_id = 1;
+    repeated NetworkState network = 2;
+    repeated ProxyRule proxy = 3;
+
+}
+
+message NetworkState {
+    string interface = 1;
+    string ip = 2;
+    string netmask = 3;
+    string gateway = 4;
+}
+
+message ProxyRule {
+    string interface = 1;
+    bool enabled = 2;
+}
+
