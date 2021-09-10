@@ -8,7 +8,7 @@ from grpcd import sensor_pb2
 from grpcd import sensor_pb2_grpc
 # from grab_package import CreatePackageTool
 import json
-from models import db_session, ListenTask
+from models import db_session, Task, ProxyTask, GrabTask
 
 
 class DispatchTask:
@@ -23,13 +23,17 @@ class DispatchTask:
         task_type = self.task_data["type"]
         if task_type == "no_task":
             return
+        self.task = db_session.query(Task).filter(Task.task_id == self.task_id).first()
+        if not self.task:
+            self.task = Task(task_id=self.task_id, network_card=self.task_detail["interface"])
+            db_session.add(self.task)
+            db_session.commit()
         getattr(self, task_type)()
-        db_session.query(ListenTask).filter(ListenTask.task_id != self.task_id).update({"status": 1})
-        db_session.commit()
 
     def delete_proxy(self):
-        db_session.query(ListenTask).filter(ListenTask.network_card == self.task_detail["interface"]).\
-            update({"status": True})
+        self.task.status = "delete_proxy"
+        db_session.add(self.task)
+        db_session.commit()
         db_session.commit()
 
     def create_proxy(self):
@@ -39,45 +43,30 @@ class DispatchTask:
         self.save_listen_data("modify_proxy")
 
     def control_proxy(self):
-        status = {"enable": False}
+        enable = False
         if self.task_detail["enabled"]:
-            status["enable"] = True
-        db_session.query(ListenTask).filter(ListenTask.network_card == self.task_detail["interface"],
-                                            ListenTask.status == False). \
-            update(status)
+            enable = True
+        self.task.status = "control_proxy"
+        self.task.enable = enable
+        db_session.add(self.task)
         db_session.commit()
 
     def save_listen_data(self, action):
-        interface = self.task_detail["interface"]
-        proxy_dict = {}
+        # interface = self.task_detail["interface"]
+        ports = []
         for item in self.task_detail["proxy_rule"]:
             proxy_host = item["proxy_host"]
             proxy_port = item["proxy_port"]
             listen_port = item["port"]
-            get_key = proxy_host + '-' + str(proxy_port)
-            exist = proxy_dict.get(get_key)
-            if not exist:
-                proxy_dict[get_key] = [listen_port]
-            else:
-                exist.append(listen_port)
-        for key, port in proxy_dict.items():
-            key_split = key.split("-")
-            proxy_host = key_split[0]
-            proxy_port = key_split[1]
-            # exist_data = db_session.query(ListenTask).filter(
-            #     ListenTask.network_card == interface,
-            #     ListenTask.proxy_host == proxy_host,
-            #     ListenTask.proxy_port == proxy_port
-            # ).first()
-            # if exist_data:
-            #     exist_data.task_id = self.task_id
-            #     exist_data.operate_type = action
-            #     exist_data.port = port
-            # else:
-            exist_data = ListenTask(port=port, network_card=interface,
-                                    proxy_port=proxy_port, proxy_host=proxy_host,
-                                    operate_type=action, task_id=self.task_id)
-            db_session.add(exist_data)
+            db_session.add(ProxyTask(proxy_port=proxy_port,
+                                     proxy_host=proxy_host,
+                                     port=listen_port,
+                                     task_id=self.task.id))
+            ports.append(listen_port)
+
+        grab_task = GrabTask(port=ports,
+                             task_id=self.task.id)
+        db_session.add(grab_task)
         db_session.commit()
 
 
@@ -101,14 +90,14 @@ def run():
 
 
 data = '''
-['{"type": "delete_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "create_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90},{"info": "HTTPS", "proxy_port": 55135, "proxy_host": "192.168.99.160", "type": 1, "port": 91}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "delete_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "create_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "delete_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "create_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}']
+['{"type": "delete_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4617-928b-74f94c42d8c3"}', '{"type": "create_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90},{"info": "HTTPS", "proxy_port": 55135, "proxy_host": "192.168.99.160", "type": 1, "port": 91}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e8119-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "delete_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-5157-928b-74f94c42d8c3"}', '{"type": "create_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e18f9-f7fb-4657-928b-74f94c42d8c3"}', '{"type": "delete_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-911b-74f94c42d8c3"}', '{"type": "create_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f91c42d8c3"}']
 
 # '''
 # data = '''
-# ['{"type": "control_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "enabled": true, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}']
+# ['{"type": "control_proxy", "detail": {"interface": "Intel(R) Wireless-AC 9260 160MHz", "enabled": true, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "a63e81f9-f7fb-4657-928b-74f94c42d8c3"}']
 # '''
 
 for i in eval(data):
-    # print(i)
-    DispatchTask(i)
-
+    print(i)
+    # DispatchTask(i)
+#

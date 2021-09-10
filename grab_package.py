@@ -7,7 +7,7 @@ from grpcd import sensor_pb2_grpc
 import json
 from scapy.all import sniff
 from libs.config import *
-from models import db_session, ListenTask
+from models import db_session, Task, ProxyTask, GrabTask
 from sqlalchemy.sql import func
 import binascii
 import datetime
@@ -34,6 +34,7 @@ ip_type = {
 process_dict = {}
 listening_port_dict = {}
 proxy_dict = {}
+exist_proxy_dict = {}
 
 
 class CreatePackageTool(Process):
@@ -163,91 +164,118 @@ def net_is_used(port, ip='127.0.0.1'):
     try:
         s.connect((ip, port))
         s.shutdown(2)
-        print('sorry, %s:%d is used' % (ip,port))
+        print('sorry, %s:%d is used' % (ip, port))
         return False
     except Exception as e:
-        print('hahahaha %s:%d is unused' % (ip,port))
+        print('%s:%d is unused' % (ip, port))
         print(e)
         return True
 
 
-def start_listen(network_name, all_port, task_id):
-    listening_port_dict[network_name] = all_port
+def start_listen(network_name, all_port, data_id):
+    exist_listen_port = listening_port_dict.get(network_name)
+    if exist_listen_port and exist_listen_port == all_port:
+        return
+    stop_listen(network_name, data_id)
     template = "port {} or " * (len(all_port))
     filter_rule = template.format(*all_port)[:-4]
     try:
         process = CreatePackageTool(filter_rule, network_name)
-        process_dict[network_name] = process
         process.start()
     except Exception as e:
         print(e)
-        put_task_message(task_id, "FAIL", str(e))
+        db_session.query(GrabTask).filter(GrabTask.id == data_id).update({"detail": str(e)})
+        db_session.commit()
+        # put_task_message(task_id, "SUCCESS")
     else:
-        put_task_message(task_id, "SUCCESS")
+        process_dict[network_name] = process
+        listening_port_dict[network_name] = all_port
 
 
-def stop_listen(network_name, task_id, is_push):
+def stop_listen(network_name, data_id):
     exist_process = process_dict.get(network_name)
     if exist_process:
         try:
             exist_process.terminate()
+            del process_dict[network_name]
         except Exception as e:
-            if is_push:
-                put_task_message(task_id, "FAIL", str(e))
-        else:
-            if is_push:
-                put_task_message(task_id, "SUCCESS")
+            db_session.query(GrabTask).filter(GrabTask.id == data_id).update({"detail": str(e)})
+            db_session.commit()
 
 
-def start_proxy(remote_port, remote_ip, local_port, local_ip="0.0.0.0"):
+def start_proxy(data_id, remote_port, remote_ip, local_port, local_ip="0.0.0.0"):
+    # 开启代理
+    find_key = f'{remote_port}-{remote_ip}-{local_port}'
+    exist_proxy = exist_proxy_dict.get(local_port)
+    if exist_proxy and exist_proxy == find_key:
+        # 不处理，和上一轮的代理是没变化的
+        return
+    # 停止之前的代理
+    stop_proxy(remote_port, remote_ip, local_port, data_id)
+
     if net_is_used(local_port):
         process = Forwarder(local_ip, local_port, remote_ip, remote_port)
-        process.start()
-        proxy_dict["port"] = process
+        try:
+            process.start()
+        except Exception as e:
+            db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e)})
+        else:
+            proxy_dict[local_port] = process
+            exist_proxy_dict[local_port] = find_key
+    else:
+        db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": "port is using"})
+    db_session.commit()
 
 
-def stop_proxy(port):
-    exist_process = proxy_dict.get(port)
+def stop_proxy(remote_port, remote_ip, port, data_id):
+    find_key = f'{remote_port}-{remote_ip}-{port}'
+    exist_process = proxy_dict.get(f'{remote_port}-{remote_ip}-{port}')
     if exist_process:
-        exist_process.terminate()
+        try:
+            exist_process.terminate()
+            del process_dict[find_key]
+        except Exception as e:
+            db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e)})
+            db_session.commit()
 
 
 def main():
     while True:
-        # 获取所有网卡，和最新的一条任务
-        network_card = db_session.query(ListenTask.network_card,
-                                        func.max(ListenTask.id)).group_by(ListenTask.network_card)
+        # 获取所有网卡最新的一条任务
+        network_card = db_session.query(Task.network_card,
+                                        func.max(Task.id)).group_by(Task.network_card)
 
         for network_item in network_card:
             network_name = network_item[0]
             # 获取最新的一条任务
-            search_task = db_session.query(ListenTask).filter(ListenTask.id == network_item[1]).first()
+            search_task = db_session.query(Task).filter(Task.id == network_item[1]).first()
             task_id = search_task.task_id
+            data_id = network_item[1]
+            grab_task = db_session.query(GrabTask.id, GrabTask.port).filter(GrabTask.task_id == data_id).first()
+            proxy_task = db_session.query(ProxyTask).filter(ProxyTask.task_id == data_id)
             if search_task.enable == False or search_task.status == True:
                 # 任务删除或者暂停
-                stop_listen(network_name, task_id, True)
+                stop_listen(network_name, grab_task[0])
                 exist_listening = listening_port_dict.get(network_name)
                 if exist_listening:
                     del listening_port_dict[network_name]
+                # 关闭所有代理
+                for proxy_task_item in proxy_task:
+                    stop_proxy(proxy_task_item.proxy_port, proxy_task_item.proxy_host,
+                               proxy_task_item.port, proxy_task_item.id)
             else:
                 # 找出当前任务的所有需要监听的端口
-                all_task = db_session.query(ListenTask.port).filter(ListenTask.task_id == task_id,
-                                                                    ListenTask.status == False,
-                                                                    ListenTask.enable == True)
-                all_port = list(chain(*chain(*all_task)))
-                exist_listen_port = listening_port_dict.get(network_name)
-                if not exist_listen_port:
-                    # 新增抓包任务
-                    start_listen(network_name, all_port, task_id)
-                else:
-                    if exist_listen_port != all_port:
-                        # 任务有变化时, 停止之前的任务
-                        stop_listen(network_name, task_id, False)
-                        if all_port != []:
-                            start_listen(network_name, all_port, task_id)
-
+                grab_task = db_session.query(GrabTask.id, GrabTask.port).filter(GrabTask.task_id == data_id).first()
+                all_port = grab_task[1]
+                # 开启抓包任务
+                start_listen(network_name, all_port, grab_task[0])
+                # 开启代理
+                for proxy_task_item in proxy_task:
+                    start_proxy(proxy_task_item.id, proxy_task_item.proxy_port,
+                                proxy_task_item.proxy_host, proxy_task_item.port)
+        #
         time.sleep(5)
-        db_session.commit()
+        # db_session.commit()
 
 
 if __name__ == '__main__':

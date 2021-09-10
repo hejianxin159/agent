@@ -12,9 +12,9 @@ import socket
 
 # 端口映射配置信息
 REMOTE_IP = '192.168.99.238'
-REMOTE_PORT = 90
+REMOTE_PORT = 99
 LOCAL_IP = '0.0.0.0'
-LOCAL_PORT = 10022
+LOCAL_PORT = 90
 
 
 class PipeThread(threading.Thread):

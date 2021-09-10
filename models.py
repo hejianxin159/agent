@@ -5,11 +5,11 @@ import os
 from sqlalchemy import create_engine
 import enum
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, SmallInteger, Enum, JSON, BOOLEAN
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy import Column, Integer, String, SmallInteger, Enum, JSON, BOOLEAN, ForeignKey
+from sqlalchemy.orm import sessionmaker, scoped_session, relationship, backref
 
 
-engine = create_engine(f'sqlite:///{os.path.join(os.path.dirname(__file__), "foo.db")}')
+engine = create_engine(f'sqlite:///{os.path.join(os.path.dirname(__file__), "task.db")}')
 
 session = sessionmaker(bind=engine)
 db_session = scoped_session(session)
@@ -29,22 +29,37 @@ class DataStatusEnum(enum.Enum):
     init = 3
 
 
-class ListenTask(Base):
-    __tablename__ = "listen_task"
+class Task(Base):
+    __tablename__ = "task"
     id = Column(Integer, primary_key=True)
     network_card = Column(String(64), comment="网卡名字")
+    task_id = Column(String(36), comment="任务id")
+    enable = Column(BOOLEAN, default=1, comment="是否开启")
+    status = Column(Enum(OperateStatusEnum), comment="操作状态")
+
+
+class GrabTask(Base):
+    __tablename__ = "listen_task"
+    id = Column(Integer, primary_key=True)
+    port = Column(JSON, comment="监听端口")
+    task_id = Column(Integer, ForeignKey("task.id"))
+    task = relationship("Task", backref=backref('grab_task', order_by=id))
+    detail = Column(String(255))
+
+
+class ProxyTask(Base):
+    __tablename__ = "proxy_task"
+    id = Column(Integer, primary_key=True)
     port = Column(JSON, comment="监听端口")
     proxy_port = Column(Integer, comment="代理端口")
     proxy_host = Column(String(32), comment="代理地址")
-    task_id = Column(String(36), comment="任务id")
-    operate_type = Column(Enum(OperateStatusEnum), comment="操作方式")
-    data_status = Column(Enum(DataStatusEnum), comment="是否成功状态", default="init")
-    # doing = Column(BOOLEAN, default=1)
-    enable = Column(BOOLEAN, default=1, comment="是否开启")
-    status = Column(BOOLEAN, default=0, comment="是否删除")
+    detail = Column(String(255))
+    task_id = Column(Integer, ForeignKey("task.id"))
+    task = relationship("Task", backref=backref('proxy_task', order_by=id))
 
 
 if __name__ == '__main__':
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     # task = ListenTask(network_card='123',
     #                port=[1, 2],
@@ -55,8 +70,6 @@ if __name__ == '__main__':
     # session.add(task)
     # session.commit()
     # a = db_session.query(ListenTask).filter(ListenTask.id == 2).first()
-    ListenTask.__table__.drop(engine)
-    ListenTask.__table__.create(engine)
 
 #
 # from sqlalchemy import Column, Integer, String, create_engine
