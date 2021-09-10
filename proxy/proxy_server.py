@@ -45,8 +45,8 @@ class PipeThread(threading.Thread):
                           self.source_addr[1])
         self.logger.debug('connection %s:%d is closed.', self.target_addr[0],
                           self.target_addr[1])
-        self.source_fd.close()
-        self.target_fd.close()
+        # self.source_fd.close()
+        # self.target_fd.close()
 
 
 class Forwarder(multiprocessing.Process):

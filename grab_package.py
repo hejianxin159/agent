@@ -229,7 +229,7 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, local_ip="0.0.0.0")
 
 def stop_proxy(remote_port, remote_ip, port, data_id):
     find_key = f'{remote_port}-{remote_ip}-{port}'
-    exist_process = proxy_dict.get(f'{remote_port}-{remote_ip}-{port}')
+    exist_process = proxy_dict.get(find_key)
     if exist_process:
         try:
             exist_process.terminate()
@@ -252,7 +252,7 @@ def main():
             task_id = search_task.task_id
             data_id = network_item[1]
             grab_task = db_session.query(GrabTask.id, GrabTask.port).filter(GrabTask.task_id == data_id).first()
-            proxy_task = db_session.query(ProxyTask).filter(ProxyTask.task_id == data_id)
+            proxy_task = search_task.proxy_task
             if search_task.enable == False or search_task.status == True:
                 # 任务删除或者暂停
                 stop_listen(network_name, grab_task[0])
@@ -265,7 +265,6 @@ def main():
                                proxy_task_item.port, proxy_task_item.id)
             else:
                 # 找出当前任务的所有需要监听的端口
-                grab_task = db_session.query(GrabTask.id, GrabTask.port).filter(GrabTask.task_id == data_id).first()
                 all_port = grab_task[1]
                 # 开启抓包任务
                 start_listen(network_name, all_port, grab_task[0])
