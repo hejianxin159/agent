@@ -274,7 +274,7 @@ def main():
                                 proxy_task_item.proxy_host, proxy_task_item.port)
         #
         time.sleep(5)
-        # db_session.commit()
+        db_session.commit()
 
 
 if __name__ == '__main__':
