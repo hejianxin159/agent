@@ -49,11 +49,11 @@ def task_status():
         # 找出有问题的代理
         for proxy in proxy_list:
             error_message = proxy.detail
-            if error_message:
+            if proxy.status:
                 error_proxy_task[network_name] = error_message
 
         for proxy in proxy_list:
-            if not proxy.detail and network_name not in error_proxy_task:
+            if not proxy.status and network_name not in error_proxy_task:
                 normal_proxy_task[network_name] = ""
     return error_proxy_task, normal_proxy_task
 
@@ -75,7 +75,7 @@ def combination_message():
         proxy_list.append({"interface": k, "enabled": True})
 
     return {
-        "probe_id": globals()["SENSOR"].id,
+        "probe_id": globals()["PROBE"].id,
         "network": network_list,
         "proxy": proxy_list
     }

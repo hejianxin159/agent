@@ -54,6 +54,7 @@ class ProxyTask(Base):
     proxy_port = Column(Integer, comment="代理端口")
     proxy_host = Column(String(32), comment="代理地址")
     detail = Column(String(255))
+    status = Column(BOOLEAN, default=0, comment="操作状态")
     task_id = Column(Integer, ForeignKey("task.id"))
     task = relationship("Task", backref=backref('proxy_task', order_by=id))
 

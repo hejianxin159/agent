@@ -62,7 +62,7 @@ class CreatePackageTool(Process):
         ethernet = packet["Ethernet"]
         protocol = ''
         self.result = {
-            "probe_id": globals()["SENSOR"].id,
+            "probe_id": globals()["PROBE"].id,
             "interface": self.iface,
             "src_ethernet": "",
             "dst_ethernet": "",
@@ -73,9 +73,9 @@ class CreatePackageTool(Process):
             "protocol": "",
             "action": "",
             "desc": "",
-            "payload": binascii.hexlify(str(packet.payload).encode()),
+            "payload": binascii.hexlify(eval(str(packet.payload))),
             "layer": len(packet.layers()),
-            "raw_log": binascii.hexlify(str(packet).encode()),
+            "raw_log": binascii.hexlify(eval(str(packet))),
             "detail": "",
             "require_analysis": True,
             "created_time": datetime.datetime.fromtimestamp(time.time()).isoformat(),
@@ -202,7 +202,7 @@ def stop_listen(network_name, data_id):
             db_session.commit()
 
 
-def start_proxy(data_id, remote_port, remote_ip, local_port, network_card,local_ip="0.0.0.0"):
+def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local_ip="0.0.0.0"):
     # 开启代理
     find_key = f'{remote_port}-{remote_ip}-{local_port}'
     exist_proxy = exist_proxy_dict.get(local_port)
@@ -213,16 +213,18 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, network_card,local_
     stop_proxy(remote_port, remote_ip, local_port, data_id)
 
     if net_is_used(local_port):
-        process = Forwarder(local_ip, local_port, remote_ip, remote_port, network_card)
+        process = Forwarder(local_ip, local_port, remote_ip, remote_port, network_card, data_id)
         try:
             process.start()
         except Exception as e:
-            db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e)})
+            db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e),
+                                                                                "status": 1})
         else:
             proxy_dict[local_port] = process
             exist_proxy_dict[local_port] = find_key
     else:
-        db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": "port is using"})
+        db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": "port is using",
+                                                                            "status": 1})
     db_session.commit()
 
 

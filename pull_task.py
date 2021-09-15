@@ -24,19 +24,16 @@ class DispatchTask:
         task_type = self.task_data["type"]
         if task_type == "no_task":
             return
-        # self.task = db_session.query(Task).filter(Task.task_id == self.task_id).first()
-        # if not self.task and task_type not in ["control_proxy", "delete_proxy"]:
         if task_type not in ["control_proxy", "delete_proxy"]:
-            self.task = Task(task_id=self.task_id, network_card=self.task_detail["interface"])
+            task_status = self.max_task(self.task_detail["interface"])
+            self.task = Task(task_id=self.task_id,
+                             network_card=self.task_detail["interface"],
+                             enable=task_status.enable if task_status else 0)
             db_session.add(self.task)
             db_session.commit()
         getattr(self, task_type)()
 
     def delete_proxy(self):
-        # self.task.status = "delete_proxy"
-        # db_session.add(self.task)
-        # db_session.commit()
-        # db_session.commit()
         self.operate_task("delete_proxy", False)
 
     def create_proxy(self):
@@ -49,16 +46,13 @@ class DispatchTask:
         enable = False
         if self.task_detail["enabled"]:
             enable = True
-        # self.task.status = "control_proxy"
-        # self.task.enable = enable
-        # db_session.add(self.task)
-        # db_session.commit()
         self.operate_task("control_proxy", enable)
 
     def save_listen_data(self, action):
         # interface = self.task_detail["interface"]
         self.task.status = action
         ports = []
+
         for item in self.task_detail["proxy_rule"]:
             proxy_host = item["proxy_host"]
             proxy_port = item["proxy_port"]
@@ -75,13 +69,17 @@ class DispatchTask:
         db_session.commit()
 
     def operate_task(self, enum_status, status=False):
+        # 修改状态
         interface = self.task_detail["interface"]
-        max_id = db_session.query(func.Max(Task.id)).filter(Task.network_card==interface).first()[0]
-        task = db_session.query(Task).filter(Task.id==max_id).first()
+        task = self.max_task(interface)
         task.enable = status
         task.status = enum_status
         db_session.add(task)
         db_session.commit()
+
+    def max_task(self, network_card):
+        max_id = db_session.query(func.Max(Task.id)).filter(Task.network_card==network_card).first()[0]
+        return db_session.query(Task).filter(Task.id==max_id).first()
 
 
 def run():
@@ -99,7 +97,7 @@ def run():
 # while True:
 #     run()
 #     time.sleep(5)
-
+# run()
 
 
 
@@ -117,7 +115,11 @@ def run():
 # #
 data = """{"type": "create_proxy", "detail": {"interface": "WLAN", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}"""
 data2 = """{"type": "control_proxy", "detail": {"interface": "WLAN", "enabled": true, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d1c3"}"""
-
+#
 for i in [data, data2]:
     print(i)
     DispatchTask(i)
+
+# while True:
+#     run()
+#     time.sleep(5)
