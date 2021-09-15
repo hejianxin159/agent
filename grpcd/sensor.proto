@@ -15,25 +15,24 @@ service InnerSensor {
 }
 
 message ProbeTrafficLog {
-    string sensor_id = 1;
-    string probe_id = 2;
-    string interface = 3;
-    string src_ethernet = 4;
-    string dst_ethernet = 5;
-    string src_ip = 6;
-    string dst_ip = 7;
-    string src_port = 8;
-    string dst_port = 9;
-    string protocol = 10;
-    string action  = 11;
-    string desc = 12;
-    string playload = 13;
-    int32 layer = 14;
-    string raw_log = 15;
-    string detail = 16;
-    bool require_analysis = 17;
-    string create_time = 18;
-    AlertLogType type = 19;
+    string probe_id = 1;
+    string interface = 2;
+    string src_ethernet = 3;
+    string dst_ethernet = 4;
+    string src_ip = 5;
+    string dst_ip = 6;
+    string src_port = 7;
+    string dst_port = 8;
+    string protocol = 9;
+    string action  = 10;
+    string desc = 11;
+    string payload = 12;
+    int32 layer = 13;
+    string raw_log = 14;
+    string detail = 15;
+    bool require_analysis = 16;
+    string created_time = 17;
+    AlertLogType type = 18;
 }
 
 enum AlertLogType {

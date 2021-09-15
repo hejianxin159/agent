@@ -62,7 +62,7 @@ class CreatePackageTool(Process):
         ethernet = packet["Ethernet"]
         protocol = ''
         self.result = {
-            "sensor_id": globals()["SENSOR"].id,
+            "probe_id": globals()["SENSOR"].id,
             "interface": self.iface,
             "src_ethernet": "",
             "dst_ethernet": "",
@@ -78,7 +78,7 @@ class CreatePackageTool(Process):
             "raw_log": binascii.hexlify(str(packet).encode()),
             "detail": "",
             "require_analysis": True,
-            "create_time": "",
+            "created_time": datetime.datetime.fromtimestamp(time.time()).isoformat(),
             "type": 0
         }
         # self.result["layer"] = len(packet.layers())
@@ -107,11 +107,11 @@ class CreatePackageTool(Process):
             self.result["src_ethernet"] = ethernet.src
             self.result["dst_ethernet"] = ethernet.dst
         self.result["protocol"] = protocol
-        self.result["datetime"] = datetime.datetime.now()
         self.parser_type()
         print(
-            self.result["sensor_id"], self.result["dst_ip"], self.result["src_ip"], self.result["type"]
+            self.result["probe_id"], self.result["dst_ip"], self.result["src_ip"], self.result["type"]
         )
+        # print(self.result)
         put_flow_message(self.result)
 
     def parser_mac_ip(self, packet, packet_type):
@@ -128,11 +128,11 @@ class CreatePackageTool(Process):
         if protocol:
             self.result["require_analysis"] = False
         if protocol == "TCP":
-            self.result["src_port"] = packet["TCP"].sport
-            self.result["dst_port"] = packet["TCP"].dport
+            self.result["src_port"] = str(packet["TCP"].sport)
+            self.result["dst_port"] = str(packet["TCP"].dport)
         elif protocol == "UDP":
-            self.result["src_port"] = packet["UDP"].sport
-            self.result["dst_port"] = packet["UDP"].dport
+            self.result["src_port"] = str(packet["UDP"].sport)
+            self.result["dst_port"] = str(packet["UDP"].dport)
 
     def parser_type(self):
         # 0: 不进入会话，1: 请求日志，2: 响应日志
@@ -146,14 +146,14 @@ def put_task_message(task_id, status, detail=""):
     with grpc.insecure_channel(f'{globals()["GRPC"].host}:{globals()["GRPC"].port}') as channel:
         # pass
         stub = sensor_pb2_grpc.InnerSensorStub(channel)
-        response = stub.FetchTask(sensor_pb2.TaskStatus(task_id=task_id, status=status, detail=detail))
+        response = stub.UploadTaskStatus(sensor_pb2.TaskStatus(task_id=task_id, status=status, detail=detail))
 
 
 def put_flow_message(message):
     with grpc.insecure_channel(f'{globals()["GRPC"].host}:{globals()["GRPC"].port}') as channel:
         # pass
         stub = sensor_pb2_grpc.InnerSensorStub(channel)
-        response = stub.FetchTask(sensor_pb2.ProbeTrafficLog(**message))
+        response = stub.UploadProbeTrafficLog(sensor_pb2.ProbeTrafficLog(**message))
 
 
 # listen_port = "port 80"
@@ -168,7 +168,6 @@ def net_is_used(port, ip='127.0.0.1'):
         return False
     except Exception as e:
         print('%s:%d is unused' % (ip, port))
-        print(e)
         return True
 
 
@@ -203,7 +202,7 @@ def stop_listen(network_name, data_id):
             db_session.commit()
 
 
-def start_proxy(data_id, remote_port, remote_ip, local_port, local_ip="0.0.0.0"):
+def start_proxy(data_id, remote_port, remote_ip, local_port, network_card,local_ip="0.0.0.0"):
     # 开启代理
     find_key = f'{remote_port}-{remote_ip}-{local_port}'
     exist_proxy = exist_proxy_dict.get(local_port)
@@ -214,7 +213,7 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, local_ip="0.0.0.0")
     stop_proxy(remote_port, remote_ip, local_port, data_id)
 
     if net_is_used(local_port):
-        process = Forwarder(local_ip, local_port, remote_ip, remote_port)
+        process = Forwarder(local_ip, local_port, remote_ip, remote_port, network_card)
         try:
             process.start()
         except Exception as e:
@@ -253,7 +252,7 @@ def main():
             data_id = network_item[1]
             grab_task = db_session.query(GrabTask.id, GrabTask.port).filter(GrabTask.task_id == data_id).first()
             proxy_task = search_task.proxy_task
-            if search_task.enable == False or search_task.status == True:
+            if search_task.enable == False or search_task.status == "delete_proxy":
                 # 任务删除或者暂停
                 stop_listen(network_name, grab_task[0])
                 exist_listening = listening_port_dict.get(network_name)
@@ -271,7 +270,8 @@ def main():
                 # 开启代理
                 for proxy_task_item in proxy_task:
                     start_proxy(proxy_task_item.id, proxy_task_item.proxy_port,
-                                proxy_task_item.proxy_host, proxy_task_item.port)
+                                proxy_task_item.proxy_host, proxy_task_item.port,
+                                search_task.network_card)
         #
         time.sleep(5)
         db_session.commit()

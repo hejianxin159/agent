@@ -9,7 +9,7 @@ from sqlalchemy import Column, Integer, String, SmallInteger, Enum, JSON, BOOLEA
 from sqlalchemy.orm import sessionmaker, scoped_session, relationship, backref
 
 
-engine = create_engine(f'sqlite:///{os.path.join(os.path.dirname(__file__), "task.db")}')
+engine = create_engine(f'sqlite:///{os.path.join(os.path.dirname(__file__), "foo.db")}')
 
 session = sessionmaker(bind=engine)
 db_session = scoped_session(session)
@@ -34,7 +34,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True)
     network_card = Column(String(64), comment="网卡名字")
     task_id = Column(String(36), comment="任务id")
-    enable = Column(BOOLEAN, default=1, comment="是否开启")
+    enable = Column(BOOLEAN, default=0, comment="是否开启")
     status = Column(Enum(OperateStatusEnum), comment="操作状态")
 
 

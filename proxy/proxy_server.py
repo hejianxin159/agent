@@ -7,12 +7,13 @@ import multiprocessing
 import logging
 import optparse
 from libs.config import *
+import json
 import socket
 
 
 # 端口映射配置信息
-REMOTE_IP = '192.168.99.238'
-REMOTE_PORT = 99
+REMOTE_IP = '192.168.99.160'
+REMOTE_PORT = 55535
 LOCAL_IP = '0.0.0.0'
 LOCAL_PORT = 90
 
@@ -51,22 +52,36 @@ class PipeThread(threading.Thread):
 
 class Forwarder(multiprocessing.Process):
 
-    def __init__(self, ip, port, remote_ip, remote_port, backlog=5):
+    def __init__(self, ip, port, remote_ip, remote_port, network_card, backlog=5):
         super(Forwarder, self).__init__()
         self.remote_ip = remote_ip
         self.remote_port = remote_port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # SO_REUSEADDR 标志告诉内核将处于 TIME_WAIT 状态的本地套接字重新使用，而不必等到固有的超时到期。
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)  # 在客户端开启心跳维护
+        self.port = port
+        self.network_card = network_card
         self.sock.bind((ip, port))
         self.sock.listen(backlog)
 
     def run(self):
+        # target_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # target_fd.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)  # 在客户端开启心跳维护
+        # target_fd.bind(("0.0.0.0", self.port + 100))
+        # target_fd.connect((self.remote_ip, self.remote_port))
+        # target_fd.send(json.dumps({"probe_id": globals()["SENSOR"].id, "interface": self.network_card}).encode())
         while True:
             client_fd, client_addr = self.sock.accept()
             target_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            target_fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             target_fd.connect((self.remote_ip, self.remote_port))
+            target_fd.send(json.dumps({"probe_id": globals()["SENSOR"].id,
+                                       "interface": self.network_card,
+                                       "port": self.port
+                                       }).encode())
 
+            print(client_fd, client_addr)
             threads = [
                 PipeThread(client_fd, target_fd),
                 PipeThread(target_fd, client_fd)
