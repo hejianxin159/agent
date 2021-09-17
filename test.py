@@ -183,14 +183,11 @@ def pkt_change(pkt):
     # print(pkt["Ethernet"].type)
     print(pkt["Ethernet"].src)
     print(pkt["Ethernet"].dst)
-    print(str(pkt)[2:-1])
-    print(dir(pkt))
-    print(len(pkt))
-    print(binascii.hexlify((str(pkt)[2:-1]).encode("ascii")))
+    print(binascii.hexlify(eval(str(pkt))))
 
     print('-'*20)
 
 # start sniffing
 print("Start Sniffing")
-sniff(iface=interface, filter=filter_bpf, store=0, prn=pkt_change, count=3)
+sniff(iface=interface, filter=filter_bpf, store=0, prn=pkt_change, count=10)
 #

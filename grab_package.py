@@ -210,7 +210,7 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local
         # 不处理，和上一轮的代理是没变化的
         return
     # 停止之前的代理
-    stop_proxy(remote_port, remote_ip, local_port, data_id)
+    stop_proxy(find_key, data_id)
 
     if net_is_used(local_port):
         process = Forwarder(local_ip, local_port, remote_ip, remote_port, network_card, data_id)
@@ -220,7 +220,7 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local
             db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e),
                                                                                 "status": 1})
         else:
-            proxy_dict[local_port] = process
+            proxy_dict[find_key] = process
             exist_proxy_dict[local_port] = find_key
     else:
         db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": "port is using",
@@ -228,8 +228,8 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local
     db_session.commit()
 
 
-def stop_proxy(remote_port, remote_ip, port, data_id):
-    find_key = f'{remote_port}-{remote_ip}-{port}'
+def stop_proxy(find_key, data_id):
+    # find_key = f'{remote_port}-{remote_ip}-{port}'
     exist_process = proxy_dict.get(find_key)
     if exist_process:
         try:
@@ -262,18 +262,20 @@ def main():
                     del listening_port_dict[network_name]
                 # 关闭所有代理
                 for proxy_task_item in proxy_task:
-                    stop_proxy(proxy_task_item.proxy_port, proxy_task_item.proxy_host,
-                               proxy_task_item.port, proxy_task_item.id)
+                    find_key = f'{proxy_task_item.proxy_port}-{proxy_task_item.proxy_host}-{proxy_task_item.port}'
+                    stop_proxy(find_key, proxy_task_item.id)
             else:
                 # 找出当前任务的所有需要监听的端口
                 all_port = grab_task[1]
                 # 开启抓包任务
                 start_listen(network_name, all_port, grab_task[0])
                 # 开启代理
+                proxy_ids = []
                 for proxy_task_item in proxy_task:
                     start_proxy(proxy_task_item.id, proxy_task_item.proxy_port,
                                 proxy_task_item.proxy_host, proxy_task_item.port,
                                 search_task.network_card)
+
         #
         time.sleep(5)
         db_session.commit()
@@ -281,23 +283,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
