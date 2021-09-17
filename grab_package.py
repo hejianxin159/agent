@@ -34,7 +34,6 @@ ip_type = {
 process_dict = {}
 listening_port_dict = {}
 proxy_dict = {}
-exist_proxy_dict = {}
 
 
 class CreatePackageTool(Process):
@@ -204,13 +203,12 @@ def stop_listen(network_name, data_id):
 
 def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local_ip="0.0.0.0"):
     # 开启代理
-    find_key = f'{remote_port}-{remote_ip}-{local_port}'
-    exist_proxy = exist_proxy_dict.get(local_port)
-    if exist_proxy and exist_proxy == find_key:
+    exist_proxy = proxy_dict.get(data_id)
+    if exist_proxy:
         # 不处理，和上一轮的代理是没变化的
         return
     # 停止之前的代理
-    stop_proxy(find_key, data_id)
+    stop_proxy(data_id)
 
     if net_is_used(local_port):
         process = Forwarder(local_ip, local_port, remote_ip, remote_port, network_card, data_id)
@@ -220,21 +218,19 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local
             db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e),
                                                                                 "status": 1})
         else:
-            proxy_dict[find_key] = process
-            exist_proxy_dict[local_port] = find_key
+            proxy_dict[data_id] = process
     else:
         db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": "port is using",
                                                                             "status": 1})
     db_session.commit()
 
 
-def stop_proxy(find_key, data_id):
-    # find_key = f'{remote_port}-{remote_ip}-{port}'
-    exist_process = proxy_dict.get(find_key)
+def stop_proxy(data_id):
+    exist_process = proxy_dict.get(data_id)
     if exist_process:
         try:
             exist_process.terminate()
-            del process_dict[find_key]
+            del proxy_dict[data_id]
         except Exception as e:
             db_session.query(ProxyTask).filter(ProxyTask.id == data_id).update({"detail": str(e)})
             db_session.commit()
@@ -262,8 +258,7 @@ def main():
                     del listening_port_dict[network_name]
                 # 关闭所有代理
                 for proxy_task_item in proxy_task:
-                    find_key = f'{proxy_task_item.proxy_port}-{proxy_task_item.proxy_host}-{proxy_task_item.port}'
-                    stop_proxy(find_key, proxy_task_item.id)
+                    stop_proxy(proxy_task_item.id)
             else:
                 # 找出当前任务的所有需要监听的端口
                 all_port = grab_task[1]
@@ -275,10 +270,15 @@ def main():
                     start_proxy(proxy_task_item.id, proxy_task_item.proxy_port,
                                 proxy_task_item.proxy_host, proxy_task_item.port,
                                 search_task.network_card)
+                    proxy_ids.append(proxy_task_item.id)
+                # 清除垃圾代理
+                all_proxy = proxy_dict.keys()
+                for delete_proxy in all_proxy:
+                    if delete_proxy not in proxy_ids:
+                        stop_proxy(delete_proxy)
 
-        #
-        time.sleep(5)
         db_session.commit()
+        time.sleep(5)
 
 
 if __name__ == '__main__':
