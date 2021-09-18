@@ -113,12 +113,31 @@ def run():
 #     print(i)
 #     # DispatchTask(i)
 # #
-data = """{"type": "create_proxy", "detail": {"interface": "WLAN", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.160", "type": 1, "port": 90}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}"""
-data2 = """{"type": "control_proxy", "detail": {"interface": "WLAN", "enabled": true, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d1c3"}"""
-#
-for i in [data, data2]:
+add_wlan = """
+{
+    "type": "create_proxy", 
+    "detail": 
+        {"interface": "WLAN",
+         "proxy_rule": [
+                 {"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.198", "type": 1, "port": 90},
+                 {"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.198", "type": 1, "port": 91}
+                 ],
+          "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"},
+           "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}"""
+start_wlan = """{"type": "control_proxy", "detail": {"interface": "WLAN", "enabled": true, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d1c3"}"""
+
+add_wlan2 = """{"type": "create_proxy", "detail": {"interface": "WLAN2", "proxy_rule": [{"info": "HTTPS", "proxy_port": 55535, "proxy_host": "192.168.99.198", "type": 1, "port": 92}], "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d811"}"""
+start_wlan2 = """{"type": "control_proxy", "detail": {"interface": "WLAN2", "enabled": true, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-71f94c42d1c3"}"""
+
+stop_wlan = """{"type": "control_proxy", "detail": {"interface": "WLAN", "enabled": false, "probe_id": "b63e81f9-f7fb-4657-928b-74f94c42d8c3"}, "task_id": "b63e81f9-f7fb-4657-928b-74f94c42d1c3"}"""
+
+for i in [add_wlan, start_wlan, add_wlan2, start_wlan2]:
     print(i)
     DispatchTask(i)
+
+for i in [stop_wlan]:
+    DispatchTask(i)
+
 
 # while True:
 #     run()

@@ -8,6 +8,7 @@ import json
 from scapy.all import sniff
 from libs.config import *
 from models import db_session, Task, ProxyTask, GrabTask
+from models import OperateStatusEnum
 from sqlalchemy.sql import func
 import binascii
 import datetime
@@ -207,8 +208,8 @@ def start_proxy(data_id, remote_port, remote_ip, local_port, network_card, local
     if exist_proxy:
         # 不处理，和上一轮的代理是没变化的
         return
-    # 停止之前的代理
-    stop_proxy(data_id)
+    # # 停止之前的代理
+    # stop_proxy(data_id)
 
     if net_is_used(local_port):
         process = Forwarder(local_ip, local_port, remote_ip, remote_port, network_card, data_id)
@@ -241,7 +242,7 @@ def main():
         # 获取所有网卡最新的一条任务
         network_card = db_session.query(Task.network_card,
                                         func.max(Task.id)).group_by(Task.network_card)
-
+        proxy_ids = []
         for network_item in network_card:
             network_name = network_item[0]
             # 获取最新的一条任务
@@ -250,7 +251,7 @@ def main():
             data_id = network_item[1]
             grab_task = db_session.query(GrabTask.id, GrabTask.port).filter(GrabTask.task_id == data_id).first()
             proxy_task = search_task.proxy_task
-            if search_task.enable == False or search_task.status == "delete_proxy":
+            if search_task.enable == False or search_task.status.value == OperateStatusEnum.delete_proxy.value:
                 # 任务删除或者暂停
                 stop_listen(network_name, grab_task[0])
                 exist_listening = listening_port_dict.get(network_name)
@@ -265,17 +266,16 @@ def main():
                 # 开启抓包任务
                 start_listen(network_name, all_port, grab_task[0])
                 # 开启代理
-                proxy_ids = []
                 for proxy_task_item in proxy_task:
                     start_proxy(proxy_task_item.id, proxy_task_item.proxy_port,
                                 proxy_task_item.proxy_host, proxy_task_item.port,
                                 search_task.network_card)
                     proxy_ids.append(proxy_task_item.id)
-                # 清除垃圾代理
-                all_proxy = proxy_dict.keys()
-                for delete_proxy in all_proxy:
-                    if delete_proxy not in proxy_ids:
-                        stop_proxy(delete_proxy)
+        # 清除垃圾代理
+        all_proxy = list(proxy_dict.keys())
+        for delete_proxy in all_proxy:
+            if delete_proxy not in proxy_ids:
+                stop_proxy(delete_proxy)
 
         db_session.commit()
         time.sleep(5)
